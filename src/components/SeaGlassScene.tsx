@@ -763,9 +763,15 @@ export default function SeaGlassScene() {
                             transition: "box-shadow 0.3s ease, scale 0.2s ease",
                         }}
                     >
-                        {/* Shard Text Content - Minimal */}
-                        <div className="relative z-10 p-4 text-center pointer-events-none">
-                            <p className="text-[11px] text-white/50 font-light leading-tight line-clamp-3 break-keep">
+                        {/* Shard Text Content - Dynamic Font Size */}
+                        <div className="relative z-10 p-2 text-center pointer-events-none w-full">
+                            <p
+                                className="text-white/50 font-light leading-tight line-clamp-3 break-keep mx-auto"
+                                style={{
+                                    fontSize: Math.max(8, radius * 0.28),
+                                    maxWidth: radius * 1.6
+                                }}
+                            >
                                 {shard.text}
                             </p>
                         </div>
