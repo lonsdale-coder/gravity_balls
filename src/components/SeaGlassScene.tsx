@@ -19,8 +19,6 @@ const BackgroundParticles = React.memo(({ particles }: { particles: any[] }) => 
                         width: p.size,
                         height: p.size,
                         boxShadow: "0 0 10px rgba(255, 255, 255, 0.1)",
-                        animationDuration: `${p.duration}s`,
-                        animationDelay: `${p.delay}s`,
                     } as any}
                 />
             ))}
@@ -37,11 +35,19 @@ interface GlassShard {
     createdAt: number;
 }
 
-const CATEGORIES = [
-    { name: "잡생각", color: "rgba(148, 163, 184, 0.4)" }, // Slate/Grey
-    { name: "추억", color: "rgba(244, 114, 182, 0.4)" },   // Pink
-    { name: "기분", color: "rgba(52, 211, 153, 0.4)" },   // Emerald/Green
-    { name: "해야 할 일", color: "rgba(96, 165, 250, 0.4)" }, // Blue
+const INITIAL_CATEGORIES = [
+    { name: "잡생각", color: "#94a3b8", glow: "#475569" }, // Slate
+    { name: "추억", color: "#f472b6", glow: "#db2777" },   // Pink
+    { name: "기분", color: "#34d399", glow: "#059669" },   // Emerald
+    { name: "해야 할 일", color: "#60a5fa", glow: "#2563eb" }, // Blue
+];
+
+const NEW_CAT_COLORS = [
+    { color: "#a78bfa", glow: "#7c3aed" }, // Violet
+    { color: "#fb923c", glow: "#ea580c" }, // Orange
+    { color: "#2dd4bf", glow: "#0d9488" }, // Teal
+    { color: "#f87171", glow: "#dc2626" }, // Red
+    { color: "#fbbf24", glow: "#d97706" }, // Amber
 ];
 
 const PASTEL_COLORS = [
@@ -63,10 +69,20 @@ export default function SeaGlassScene() {
     const [userId, setUserId] = useState<string | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
     const [registrationMessage, setRegistrationMessage] = useState<string | null>(null);
-    const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
+    const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+    const [selectedCategory, setSelectedCategory] = useState(INITIAL_CATEGORIES[0]);
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState("");
+    const [ripples, setRipples] = useState<{ id: number, x: number, y: number }[]>([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState("");
     const wallsRef = useRef<Matter.Body[]>([]);
+
+    // Gyroscope states
+    const [isGyroEnabled, setIsGyroEnabled] = useState(false);
+    const [showingGyroButton, setShowingGyroButton] = useState(true);
+    const targetGravity = useRef({ x: 0, y: 0 });
+    const currentGravity = useRef({ x: 0, y: 0 });
 
     // Cosmic background particles (stars/bubbles)
     const [particles] = useState(() =>
@@ -75,8 +91,6 @@ export default function SeaGlassScene() {
             x: Math.random() * 100,
             y: Math.random() * 100,
             size: Math.random() * 2 + 1,
-            duration: Math.random() * 10 + 20,
-            delay: Math.random() * -20,
         }))
     );
 
@@ -101,11 +115,22 @@ export default function SeaGlassScene() {
             if (wallsRef.current.length > 0) {
                 World.remove(engine.world, wallsRef.current);
             }
+
+            // Define an inner play area (e.g., 10% padding)
+            const marginX = w * 0.12;
+            const marginY = h * 0.18;
+            const playWidth = w - marginX * 2;
+            const playHeight = h - marginY * 2;
+
             const newWalls = [
-                Bodies.rectangle(w / 2, -10, w, 20, { isStatic: true, restitution: 1 }),
-                Bodies.rectangle(w / 2, h + 10, w, 20, { isStatic: true, restitution: 1 }),
-                Bodies.rectangle(-10, h / 2, 20, h, { isStatic: true, restitution: 1 }),
-                Bodies.rectangle(w + 10, h / 2, 20, h, { isStatic: true, restitution: 1 }),
+                // Top
+                Bodies.rectangle(w / 2, marginY - 10, playWidth, 20, { isStatic: true, restitution: 0.8 }),
+                // Bottom
+                Bodies.rectangle(w / 2, h - marginY + 10, playWidth, 20, { isStatic: true, restitution: 0.8 }),
+                // Left
+                Bodies.rectangle(marginX - 10, h / 2, 20, h - marginY * 2, { isStatic: true, restitution: 0.8 }),
+                // Right
+                Bodies.rectangle(w - marginX + 10, h / 2, 20, h - marginY * 2, { isStatic: true, restitution: 0.8 }),
             ];
             wallsRef.current = newWalls;
             World.add(engine.world, newWalls);
@@ -132,29 +157,27 @@ export default function SeaGlassScene() {
         const runner = Matter.Runner.create();
         Matter.Runner.run(runner, engine);
 
-        // Apply autonomous swimming forces with optimized calculation
+        // Apply autonomous swimming forces
         Matter.Events.on(engine, 'beforeUpdate', () => {
             const allBodies = Matter.Composite.allBodies(engine.world);
-            const forceMagnitudeBase = 0.0001;
+            const forceMagnitudeBase = 0.0004;
 
             for (let i = 0; i < allBodies.length; i++) {
                 const body = allBodies[i];
                 if (body.isStatic) continue;
 
-                // Subtle random current
+                // 1. Random current
                 Matter.Body.applyForce(body, body.position, {
                     x: (Math.random() - 0.5) * forceMagnitudeBase * body.mass,
                     y: (Math.random() - 0.5) * forceMagnitudeBase * body.mass
                 });
 
-                // Maintain minimum velocity
-                const vx = body.velocity.x;
-                const vy = body.velocity.y;
-                const speedSq = vx * vx + vy * vy;
-                if (speedSq < 0.25) { // 0.5 * 0.5
+                // 2. Dynamic speed limit
+                const speed = body.speed;
+                if (speed > 3.5) {
                     Matter.Body.setVelocity(body, {
-                        x: vx * 1.05 + (Math.random() - 0.5) * 0.05,
-                        y: vy * 1.05 + (Math.random() - 0.5) * 0.05
+                        x: body.velocity.x * 0.98,
+                        y: body.velocity.y * 0.98
                     });
                 }
             }
@@ -175,13 +198,73 @@ export default function SeaGlassScene() {
         };
         const animId = requestAnimationFrame(update);
 
+        // Smoothing loop for gravity
+        const smoothGravity = () => {
+            if (engineRef.current) {
+                const lerp = 0.05; // Smoothing factor
+                currentGravity.current.x += (targetGravity.current.x - currentGravity.current.x) * lerp;
+                currentGravity.current.y += (targetGravity.current.y - currentGravity.current.y) * lerp;
+
+                engineRef.current.world.gravity.x = currentGravity.current.x;
+                engineRef.current.world.gravity.y = currentGravity.current.y;
+            }
+            requestAnimationFrame(smoothGravity);
+        };
+        const gravityAnimId = requestAnimationFrame(smoothGravity);
+
         return () => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(animId);
+            cancelAnimationFrame(gravityAnimId);
             Matter.Runner.stop(runner);
             Engine.clear(engine);
         };
     }, []);
+
+    // Gyroscope Logic
+    useEffect(() => {
+        if (!isGyroEnabled) {
+            targetGravity.current = { x: 0, y: 0 };
+            return;
+        }
+
+        const handleOrientation = (e: DeviceOrientationEvent) => {
+            const beta = e.beta || 0; // -180 to 180
+            const gamma = e.gamma || 0; // -90 to 90
+
+            // Sensitivity and scaling
+            const sensitivity = 0.008;
+
+            // Map gamma to x, beta to y
+            // We cap the values for stability
+            const nextX = Math.max(-1, Math.min(1, gamma * sensitivity));
+            const nextY = Math.max(-1, Math.min(1, (beta - 45) * sensitivity)); // Offset by 45 deg for natural holding angle
+
+            targetGravity.current = { x: nextX, y: nextY };
+        };
+
+        window.addEventListener('deviceorientation', handleOrientation);
+        return () => window.removeEventListener('deviceorientation', handleOrientation);
+    }, [isGyroEnabled]);
+
+    const requestGyroPermission = async () => {
+        // iOS 13+ permission request
+        if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+            try {
+                const permission = await (DeviceOrientationEvent as any).requestPermission();
+                if (permission === 'granted') {
+                    setIsGyroEnabled(true);
+                    setShowingGyroButton(false);
+                }
+            } catch (err) {
+                console.error("Gyroscope permission denied:", err);
+            }
+        } else {
+            // Non-iOS or older versions
+            setIsGyroEnabled(true);
+            setShowingGyroButton(false);
+        }
+    };
 
     // Add a shard
     const addShard = (text: string, categoryName: string) => {
@@ -189,21 +272,21 @@ export default function SeaGlassScene() {
 
         const id = Math.random().toString(36).substr(2, 9);
         const createdAt = Date.now();
-        const categoryObj = CATEGORIES.find(c => c.name === categoryName) || CATEGORIES[0];
+        const categoryObj = categories.find(c => c.name === categoryName) || categories[0];
         const color = categoryObj.color;
 
-        const x = Math.random() * (window.innerWidth - 100) + 50;
-        const y = Math.random() * (window.innerHeight - 100) + 50;
-        const radius = 40 + Math.random() * 20;
+        const x = Math.random() * (window.innerWidth * 0.6) + (window.innerWidth * 0.2);
+        const y = Math.random() * (window.innerHeight * 0.5) + (window.innerHeight * 0.25);
+        const radius = 35 + Math.random() * 20;
 
         const body = Matter.Bodies.circle(x, y, radius, {
-            restitution: 0.95,
-            frictionAir: 0.02,
+            restitution: 0.8,
+            frictionAir: 0.01,
         });
 
         Matter.Body.setVelocity(body, {
-            x: (Math.random() - 0.5) * 1.5,
-            y: (Math.random() - 0.5) * 1.5,
+            x: (Math.random() - 0.5) * 3.0,
+            y: (Math.random() - 0.5) * 3.0,
         });
 
         Matter.World.add(engineRef.current.world, body);
@@ -274,6 +357,81 @@ export default function SeaGlassScene() {
                     if (error) console.error('Error updating shard:', error);
                 });
         }
+    };
+
+    const handleAddCategory = () => {
+        if (!newCategoryName.trim()) return;
+        if (categories.some(c => c.name === newCategoryName.trim())) {
+            alert("이미 존재하는 카테고리입니다.");
+            return;
+        }
+
+        const randomColor = NEW_CAT_COLORS[Math.floor(Math.random() * NEW_CAT_COLORS.length)];
+        const newCat = {
+            name: newCategoryName.trim(),
+            ...randomColor
+        };
+
+        setCategories(prev => [...prev, newCat]);
+        setNewCategoryName("");
+        setIsAddingCategory(false);
+        setSelectedCategory(newCat);
+    };
+
+    const handleDeleteCategory = (name: string) => {
+        if (categories.length <= 1) {
+            alert("최소 하나의 카테고리는 있어야 합니다.");
+            return;
+        }
+
+        const newCats = categories.filter(c => c.name !== name);
+        setCategories(newCats);
+
+        if (selectedCategory.name === name) {
+            setSelectedCategory(newCats[0]);
+        }
+    };
+
+    const handleInteraction = (clientX: number, clientY: number, target: EventTarget) => {
+        if (!engineRef.current || !sceneRef.current) return;
+
+        // Ignore if clicking on UI elements
+        const targetElement = target as HTMLElement;
+        if (targetElement.closest('button') || targetElement.closest('input') || targetElement.closest('textarea')) {
+            return;
+        }
+
+        const rect = sceneRef.current.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        // 1. Create visual ripple
+        const rippleId = Date.now();
+        setRipples(prev => [...prev, { id: rippleId, x, y }]);
+        setTimeout(() => {
+            setRipples(prev => prev.filter(r => r.id !== rippleId));
+        }, 1000);
+
+        // 2. Physical push to nearby shards
+        const allBodies = Matter.Composite.allBodies(engineRef.current.world);
+        const pushRadius = 250;
+        const pushStrength = 0.12; // Slightly stronger for better feel
+
+        allBodies.forEach(body => {
+            if (body.isStatic) return;
+
+            const dx = body.position.x - x;
+            const dy = body.position.y - y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < pushRadius) {
+                const force = (1 - distance / pushRadius) * pushStrength;
+                Matter.Body.applyForce(body, body.position, {
+                    x: (dx / (distance || 1)) * force * body.mass,
+                    y: (dy / (distance || 1)) * force * body.mass
+                });
+            }
+        });
     };
 
     // Check for existing session on mount
@@ -378,16 +536,17 @@ export default function SeaGlassScene() {
                     }));
 
                     loadedShards.forEach(s => {
-                        const x = Math.random() * (window.innerWidth - 100) + 50;
-                        const y = Math.random() * (window.innerHeight - 100) + 50;
-                        const radius = 40 + Math.random() * 20;
+                        const x = Math.random() * (window.innerWidth * 0.6) + (window.innerWidth * 0.2);
+                        const y = Math.random() * (window.innerHeight * 0.5) + (window.innerHeight * 0.25);
+                        const radius = 35 + Math.random() * 20;
+
                         const body = Matter.Bodies.circle(x, y, radius, {
-                            restitution: 0.95,
-                            frictionAir: 0.02,
+                            restitution: 0.8,
+                            frictionAir: 0.01,
                         });
                         Matter.Body.setVelocity(body, {
-                            x: (Math.random() - 0.5) * 1.5,
-                            y: (Math.random() - 0.5) * 1.5,
+                            x: (Math.random() - 0.5) * 3.0,
+                            y: (Math.random() - 0.5) * 3.0,
                         });
                         if (engineRef.current) Matter.World.add(engineRef.current.world, body);
                         shardBodiesRef.current.set(s.id, body);
@@ -413,7 +572,45 @@ export default function SeaGlassScene() {
     return (
         <div ref={sceneRef} className="relative w-full h-screen overflow-hidden bg-transparent">
             {/* Cosmic Sea Background */}
-            <div className="cosmic-sea-bg" />
+            <div className="cosmic-sea-bg pointer-events-none" />
+
+            {/* Play Area Frame Visual Only - Minimal */}
+            <div
+                className="absolute inset-[18vh_12vw] border border-white/5 rounded-[40px] pointer-events-none z-0 bg-white/[0.01]"
+            >
+                <div className="absolute inset-0 border border-white/5 rounded-[40px]" />
+            </div>
+
+            {/* Ripple & Interaction Layer - Behaves as the "background" for clicks */}
+            <div
+                className="absolute inset-0 z-10 cursor-crosshair overflow-hidden"
+                onMouseDown={(e) => handleInteraction(e.clientX, e.clientY, e.target)}
+                onTouchStart={(e) => {
+                    const touch = e.touches[0];
+                    handleInteraction(touch.clientX, touch.clientY, e.target);
+                }}
+            >
+                <AnimatePresence>
+                    {ripples.map(ripple => (
+                        <motion.div
+                            key={ripple.id}
+                            initial={{ scale: 0, opacity: 0.6 }}
+                            animate={{ scale: 4, opacity: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 1, ease: "easeOut" }}
+                            className="absolute rounded-full border border-white/30 bg-white/5 pointer-events-none"
+                            style={{
+                                left: ripple.x,
+                                top: ripple.y,
+                                width: 100,
+                                height: 100,
+                                marginLeft: -50,
+                                marginTop: -50,
+                            }}
+                        />
+                    ))}
+                </AnimatePresence>
+            </div>
 
             {/* Background Particles (Optimized) */}
             <BackgroundParticles particles={particles} />
@@ -422,20 +619,73 @@ export default function SeaGlassScene() {
             <div className="absolute top-6 sm:top-10 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4 sm:px-6">
                 <div className="flex flex-col gap-3 sm:gap-4">
                     {/* Category Selection - Scrollable on mobile */}
-                    <div className="flex justify-start sm:justify-center gap-2 overflow-x-auto pb-2 no-scrollbar px-2">
-                        {CATEGORIES.map((cat) => (
-                            <button
-                                key={cat.name}
-                                onClick={() => setSelectedCategory(cat)}
-                                className={`whitespace-nowrap px-4 py-2 rounded-full text-[10px] sm:text-xs tracking-wider transition-all border shrink-0 ${selectedCategory.name === cat.name
-                                    ? "bg-white/20 border-white/40 text-white shadow-lg"
-                                    : "bg-white/5 border-white/5 text-white/40 hover:bg-white/10"
-                                    }`}
-                                style={selectedCategory.name === cat.name ? { boxShadow: `0 0 15px ${cat.color}` } : {}}
-                            >
-                                {cat.name}
-                            </button>
+                    <div className="flex items-center justify-start sm:justify-center gap-2 overflow-x-auto pb-2 no-scrollbar px-2">
+                        {categories.map((cat) => (
+                            <div key={cat.name} className="relative group/cat shrink-0">
+                                <button
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`whitespace-nowrap px-5 py-2.5 rounded-full text-[11px] sm:text-xs tracking-wider transition-all border font-medium ${selectedCategory.name === cat.name
+                                        ? "text-white shadow-xl scale-105"
+                                        : "bg-white/5 border-white/5 text-white/30 hover:bg-white/10 hover:text-white/60"
+                                        }`}
+                                    style={selectedCategory.name === cat.name ? {
+                                        backgroundColor: cat.color,
+                                        borderColor: cat.color,
+                                        boxShadow: `0 0 20px ${cat.glow}66`
+                                    } : {}}
+                                >
+                                    {cat.name}
+                                </button>
+                                {categories.length > 1 && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteCategory(cat.name);
+                                        }}
+                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 rounded-full flex items-center justify-center text-[8px] text-white opacity-0 group-hover/cat:opacity-100 transition-opacity shadow-lg"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
                         ))}
+
+                        {/* Add Category Button */}
+                        {!isAddingCategory ? (
+                            <button
+                                onClick={() => setIsAddingCategory(true)}
+                                className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:bg-white/10 hover:text-white/80 transition-all shrink-0 ml-1"
+                            >
+                                +
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full pl-3 pr-1 py-1 shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={newCategoryName}
+                                    onChange={(e) => setNewCategoryName(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                                    placeholder="이름..."
+                                    className="bg-transparent border-none outline-none text-white text-[11px] w-16 px-1 lowercase"
+                                />
+                                <button
+                                    onClick={handleAddCategory}
+                                    className="w-6 h-6 rounded-full bg-blue-500/40 flex items-center justify-center text-[10px] text-white hover:bg-blue-500/60 transition-all"
+                                >
+                                    ✓
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsAddingCategory(false);
+                                        setNewCategoryName("");
+                                    }}
+                                    className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-white/40 hover:bg-white/10 transition-all"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <form
@@ -454,9 +704,20 @@ export default function SeaGlassScene() {
                             type="text"
                             autoComplete="off"
                             placeholder={`${selectedCategory.name} 조각 띄우기...`}
-                            className="flex-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base text-white placeholder-white/40 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-light"
+                            className="flex-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base text-white placeholder-white/40 outline-none transition-all font-light focus:ring-2"
+                            style={{
+                                focusRingColor: selectedCategory.color + '44',
+                                borderColor: selectedCategory.color + '33'
+                            } as any}
                         />
-                        <button className="bg-blue-600/30 hover:bg-blue-600/50 backdrop-blur-xl text-blue-100 border border-blue-500/30 rounded-xl sm:rounded-2xl px-5 sm:px-8 py-3 sm:py-4 transition-all text-sm sm:text-base font-medium">
+                        <button
+                            className="backdrop-blur-xl text-white border rounded-xl sm:rounded-2xl px-5 sm:px-8 py-3 sm:py-4 transition-all text-sm sm:text-base font-semibold shadow-lg"
+                            style={{
+                                backgroundColor: selectedCategory.color + '33',
+                                borderColor: selectedCategory.color + '55',
+                                boxShadow: `0 0 15px ${selectedCategory.glow}22`
+                            }}
+                        >
                             발송
                         </button>
                     </form>
@@ -467,7 +728,6 @@ export default function SeaGlassScene() {
             {shards.map((shard) => {
                 const body = shardBodiesRef.current.get(shard.id);
                 if (!body) return null;
-
                 const radius = (body as any).circleRadius;
 
                 return (
@@ -479,32 +739,31 @@ export default function SeaGlassScene() {
                         }}
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        onClick={() => setActiveShard(shard)}
-                        className="absolute cursor-pointer select-none group flex items-center justify-center overflow-hidden"
+                        onPointerDown={(e) => {
+                            e.stopPropagation(); // CRITICAL: Stop event from reaching ripple layer
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveShard(shard);
+                        }}
+                        className="absolute cursor-pointer select-none group flex items-center justify-center overflow-hidden z-40 bg-white/5 border border-white/10 rounded-full"
                         style={{
                             left: 0,
                             top: 0,
                             width: radius * 2,
                             height: radius * 2,
-                            backgroundColor: shard.color.replace('0.4', '0.08'), // More transparent for perf
-                            borderRadius: '50%',
-                            border: "1.5px solid rgba(255, 255, 255, 0.15)",
+                            backgroundColor: shard.color.replace('0.4', '0.08'),
                             boxShadow: "0 4px 15px rgba(0, 0, 0, 0.1)",
-                            willChange: "transform", // Hint GPU
+                            willChange: "transform",
                             transition: "box-shadow 0.3s ease, scale 0.2s ease",
                         }}
                     >
-                        {/* Shimmer Effect */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-black/10 opacity-30 rounded-full" />
-
-                        {/* Shard Text Content */}
+                        {/* Shard Text Content - Minimal */}
                         <div className="relative z-10 p-4 text-center pointer-events-none">
-                            <p className="text-[11px] text-white/40 font-light leading-tight line-clamp-3 break-keep">
+                            <p className="text-[11px] text-white/50 font-light leading-tight line-clamp-3 break-keep">
                                 {shard.text}
                             </p>
                         </div>
-
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-white/5 rounded-full" />
                     </motion.div>
                 );
             })}
@@ -523,15 +782,12 @@ export default function SeaGlassScene() {
                         className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-950/60 backdrop-blur-md"
                     >
                         <motion.div
-                            initial={{ scale: 0.9, y: 30, rotateX: 20 }}
-                            animate={{ scale: 1, y: 0, rotateX: 0 }}
-                            exit={{ scale: 0.9, y: 30, rotateX: 20 }}
-                            className="glass-card max-w-lg w-full p-8 sm:p-12 rounded-[30px] sm:rounded-[40px] text-center relative overflow-hidden"
+                            initial={{ scale: 0.9, y: 30 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 30 }}
+                            className="glass-card max-w-lg w-full p-8 sm:p-12 rounded-[30px] sm:rounded-[40px] text-center relative overflow-hidden bg-slate-900/40 border border-white/10"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            {/* Decorative glow inside modal */}
-                            <div className="absolute -top-24 -left-24 w-48 h-48 bg-blue-500/20 rounded-full blur-3xl text-xs" />
-                            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/20 rounded-full blur-3xl text-xs" />
 
                             {!isEditing ? (
                                 <>
@@ -617,10 +873,29 @@ export default function SeaGlassScene() {
                         </button>
                     </motion.div>
                 )}
+
+                {/* Gyroscope Toggle Button */}
+                <button
+                    onClick={() => {
+                        if (isGyroEnabled) {
+                            setIsGyroEnabled(false);
+                        } else {
+                            requestGyroPermission();
+                        }
+                    }}
+                    className={`backdrop-blur-md border px-4 py-2 rounded-xl text-[10px] sm:text-xs tracking-[0.2em] font-medium uppercase transition-all shadow-lg flex items-center gap-2 ${isGyroEnabled
+                            ? "bg-blue-500/30 border-blue-400/50 text-blue-100"
+                            : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                        }`}
+                >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isGyroEnabled ? "bg-blue-400 animate-pulse" : "bg-white/20"}`} />
+                    {isGyroEnabled ? "Motion ON" : "Motion OFF"}
+                </button>
+
                 {userId && (
                     <button
                         onClick={handleLogout}
-                        className="text-blue-400/40 hover:text-blue-400/80 text-[10px] sm:text-xs tracking-widest uppercase transition-all"
+                        className="bg-white/5 hover:bg-red-500/20 backdrop-blur-md border border-white/10 hover:border-red-500/40 text-white/60 hover:text-red-400 px-4 py-2 rounded-xl text-[10px] sm:text-xs tracking-[0.2em] font-medium uppercase transition-all shadow-lg shadow-black/20"
                     >
                         Logout
                     </button>
@@ -680,11 +955,8 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (id: string, password: str
             <motion.div
                 initial={{ scale: 0.9, y: 20, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
-                className="glass-card max-w-md w-full p-8 sm:p-12 rounded-[40px] text-center border border-white/10 shadow-2xl relative overflow-hidden"
+                className="glass-card max-w-md w-full p-8 sm:p-12 rounded-[40px] text-center border border-white/10 shadow-2xl relative overflow-hidden bg-slate-900/40"
             >
-                {/* Decorative background glow */}
-                <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
                 <div className="relative z-10">
                     <h2 className="text-2xl sm:text-3xl font-light text-blue-100 mb-2 tracking-tight">
@@ -723,7 +995,7 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (id: string, password: str
 
                         <button
                             disabled={loading}
-                            className="w-full mt-6 bg-gradient-to-r from-blue-600/40 to-indigo-600/40 hover:from-blue-600/60 hover:to-indigo-600/60 text-white rounded-2xl py-4 transition-all tracking-[0.2em] uppercase text-xs font-medium disabled:opacity-50 shadow-lg shadow-blue-900/20 border border-white/10"
+                            className="w-full mt-6 bg-white/5 hover:bg-white/10 text-white rounded-2xl py-4 transition-all tracking-[0.2em] uppercase text-xs font-medium disabled:opacity-50 border border-white/10"
                         >
                             {loading ? "작업 중..." : (isSignUp ? "가입하기" : "로그인")}
                         </button>
