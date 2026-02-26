@@ -174,10 +174,11 @@ export default function SeaGlassScene() {
 
                 // 2. Dynamic speed limit
                 const speed = body.speed;
-                if (speed > 3.5) {
+                const maxSpeed = 8.0; // Increased even more for "fast" motion
+                if (speed > maxSpeed) {
                     Matter.Body.setVelocity(body, {
-                        x: body.velocity.x * 0.98,
-                        y: body.velocity.y * 0.98
+                        x: body.velocity.x * 0.94,
+                        y: body.velocity.y * 0.94
                     });
                 }
             }
@@ -233,12 +234,12 @@ export default function SeaGlassScene() {
             const gamma = e.gamma || 0; // -90 to 90
 
             // Sensitivity and scaling
-            const sensitivity = 0.008;
+            const sensitivity = 0.035; // Significant increase for faster response
 
             // Map gamma to x, beta to y
             // We cap the values for stability
-            const nextX = Math.max(-1, Math.min(1, gamma * sensitivity));
-            const nextY = Math.max(-1, Math.min(1, (beta - 45) * sensitivity)); // Offset by 45 deg for natural holding angle
+            const nextX = Math.max(-2.2, Math.min(2.2, gamma * sensitivity));
+            const nextY = Math.max(-2.2, Math.min(2.2, (beta - 45) * sensitivity)); // Offset by 45 deg for natural holding angle
 
             targetGravity.current = { x: nextX, y: nextY };
         };
@@ -278,8 +279,8 @@ export default function SeaGlassScene() {
         const x = Math.random() * (window.innerWidth * 0.6) + (window.innerWidth * 0.2);
         const y = Math.random() * (window.innerHeight * 0.5) + (window.innerHeight * 0.25);
 
-        const isMobile = window.innerWidth < 640;
-        const radius = (isMobile ? 22 : 35) + Math.random() * 15;
+        // Proportional sizing: 2.5% of width, minimum 20px for readability
+        const radius = Math.max(20, window.innerWidth * 0.025) + Math.random() * 12;
 
         const body = Matter.Bodies.circle(x, y, radius, {
             restitution: 0.8,
@@ -541,8 +542,8 @@ export default function SeaGlassScene() {
                         const x = Math.random() * (window.innerWidth * 0.6) + (window.innerWidth * 0.2);
                         const y = Math.random() * (window.innerHeight * 0.5) + (window.innerHeight * 0.25);
 
-                        const isMobile = window.innerWidth < 640;
-                        const radius = (isMobile ? 22 : 35) + Math.random() * 15;
+                        // Proportional sizing: match visual ratio across devices
+                        const radius = Math.max(20, window.innerWidth * 0.025) + Math.random() * 12;
 
                         const body = Matter.Bodies.circle(x, y, radius, {
                             restitution: 0.8,
