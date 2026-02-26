@@ -298,25 +298,28 @@ export default function SeaGlassScene() {
         return () => subscription.unsubscribe();
     }, []);
 
-    const handleAuth = React.useCallback(async (email: string, password: string, isSignUp: boolean) => {
+    const handleAuth = React.useCallback(async (username: string, password: string, isSignUp: boolean) => {
         setIsAuthLoading(true);
+        // Convert ID to a virtual email format for Supabase
+        const virtualEmail = `${username.trim().toLowerCase()}@seaglass.internal`;
+
         try {
             if (isSignUp) {
                 const { data, error } = await supabase.auth.signUp({
-                    email,
+                    email: virtualEmail,
                     password,
                 });
                 if (error) throw error;
 
                 if (data.session) {
                     setUserId(data.user?.id || null);
-                    setRegistrationMessage("가입을 축하합니다! 이메일 인증을 완료하시면 더욱 안전하게 이용하실 수 있습니다.");
+                    setRegistrationMessage("가입을 축하합니다! 이제 당신만의 바다를 가꿀 수 있습니다.");
                 } else if (data.user) {
-                    setRegistrationMessage("가입이 완료되었습니다! 안내 메일을 보내드렸으니 메일함에서 인증을 완료해 주세요.");
+                    setRegistrationMessage("가입이 완료되었습니다! 이제 로그인할 수 있습니다.");
                 }
             } else {
                 const { data, error } = await supabase.auth.signInWithPassword({
-                    email,
+                    email: virtualEmail,
                     password,
                 });
                 if (error) throw error;
@@ -635,9 +638,9 @@ export default function SeaGlassScene() {
     );
 }
 
-// Sub-component for Email/Password Auth
-const AuthOverlay = React.memo(({ onAuth }: { onAuth: (email: string, password: string, isSignUp: boolean) => Promise<{ success: boolean, error?: string }> }) => {
-    const [email, setEmail] = useState("");
+// Sub-component for ID/Password Auth
+const AuthOverlay = React.memo(({ onAuth }: { onAuth: (id: string, password: string, isSignUp: boolean) => Promise<{ success: boolean, error?: string }> }) => {
+    const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -646,23 +649,22 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (email: string, password: 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!email.trim() || !password.trim()) return;
+        if (!username.trim() || !password.trim()) return;
         setLoading(true);
         setErrorMsg("");
         setSuccessMsg("");
-        const result = await onAuth(email.trim(), password, isSignUp);
+        const result = await onAuth(username.trim(), password, isSignUp);
         if (result.success) {
             if (isSignUp) {
-                setSuccessMsg("가입이 완료되었습니다! 이메일 인증을 완료해 주세요.");
+                setSuccessMsg("가입이 완료되었습니다! 이제 로그인할 수 있습니다.");
             }
         } else if (result.error) {
             // Translate common Supabase Auth errors to Korean for better UX
             let translatedError = result.error;
             if (result.error.includes("rate limit")) translatedError = "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
-            else if (result.error.includes("Invalid login credentials")) translatedError = "이메일 또는 비밀번호가 올바르지 않습니다.";
-            else if (result.error.includes("already registered")) translatedError = "이미 가입된 이메일입니다.";
+            else if (result.error.includes("Invalid login credentials")) translatedError = "아이디 또는 비밀번호가 올바르지 않습니다.";
+            else if (result.error.includes("already registered")) translatedError = "이미 존재하는 아이디입니다.";
             else if (result.error.includes("Password should be at least")) translatedError = "비밀번호는 최소 6자 이상이어야 합니다.";
-            else if (result.error.includes("Email not confirmed")) translatedError = "이메일 인증이 완료되지 않았습니다. 메일함을 확인해주세요.";
             setErrorMsg(translatedError);
         }
         setLoading(false);
@@ -694,12 +696,12 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (email: string, password: 
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-1 text-left">
-                            <label className="text-[10px] uppercase tracking-widest text-blue-300/40 ml-4">Email</label>
+                            <label className="text-[10px] uppercase tracking-widest text-blue-300/40 ml-4">ID</label>
                             <input
-                                type="email"
-                                placeholder="name@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                type="text"
+                                placeholder="사용자 아이디"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 disabled={loading}
                                 className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white placeholder-white/10 outline-none focus:ring-1 focus:ring-blue-500/50 transition-all font-light"
                                 required
@@ -719,40 +721,36 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (email: string, password: 
                             />
                         </div>
 
-                        {/* Success Message Display */}
-                        <AnimatePresence>
-                            {successMsg && (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    className="text-emerald-400 text-xs sm:text-sm font-light mt-2 bg-emerald-500/10 py-3 px-4 rounded-xl border border-emerald-500/20"
-                                >
-                                    {successMsg}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        {/* Error Message Display */}
-                        <AnimatePresence>
-                            {errorMsg && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    className="text-red-400 text-xs sm:text-sm font-light mt-2 bg-red-500/10 py-2 px-4 rounded-xl border border-red-500/20"
-                                >
-                                    {errorMsg}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
                         <button
                             disabled={loading}
                             className="w-full mt-6 bg-gradient-to-r from-blue-600/40 to-indigo-600/40 hover:from-blue-600/60 hover:to-indigo-600/60 text-white rounded-2xl py-4 transition-all tracking-[0.2em] uppercase text-xs font-medium disabled:opacity-50 shadow-lg shadow-blue-900/20 border border-white/10"
                         >
                             {loading ? "작업 중..." : (isSignUp ? "가입하기" : "로그인")}
                         </button>
+
+                        {/* Success & Error Messages Displayed Below */}
+                        <AnimatePresence>
+                            {successMsg && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="text-emerald-400 text-xs sm:text-sm font-light mt-4 bg-emerald-500/10 py-3 px-4 rounded-xl border border-emerald-500/20"
+                                >
+                                    {successMsg}
+                                </motion.div>
+                            )}
+                            {errorMsg && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="text-red-400 text-xs sm:text-sm font-light mt-4 bg-red-500/10 py-3 px-4 rounded-xl border border-red-500/20"
+                                >
+                                    {errorMsg}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </form>
 
                     <div className="mt-8 flex flex-col gap-4">
