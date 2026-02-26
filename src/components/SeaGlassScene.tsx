@@ -62,6 +62,7 @@ export default function SeaGlassScene() {
     const shardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const [userId, setUserId] = useState<string | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
+    const [registrationMessage, setRegistrationMessage] = useState<string | null>(null);
     const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState("");
@@ -306,11 +307,12 @@ export default function SeaGlassScene() {
                     password,
                 });
                 if (error) throw error;
+
                 if (data.session) {
                     setUserId(data.user?.id || null);
+                    setRegistrationMessage("가입을 축하합니다! 이메일 인증을 완료하시면 더욱 안전하게 이용하실 수 있습니다.");
                 } else if (data.user) {
-                    // If email confirmation is enabled, we might not get a session immediately
-                    alert("가입을 축하합니다! 이메일 확인이 필요할 수 있습니다.");
+                    setRegistrationMessage("가입이 완료되었습니다! 안내 메일을 보내드렸으니 메일함에서 인증을 완료해 주세요.");
                 }
             } else {
                 const { data, error } = await supabase.auth.signInWithPassword({
@@ -319,6 +321,7 @@ export default function SeaGlassScene() {
                 });
                 if (error) throw error;
                 setUserId(data.user?.id || null);
+                setRegistrationMessage(null); // Clear message on login
             }
             return { success: true };
         } catch (error: any) {
@@ -594,15 +597,32 @@ export default function SeaGlassScene() {
                 )}
             </AnimatePresence>
 
-            {/* Logout button */}
-            {userId && (
-                <button
-                    onClick={handleLogout}
-                    className="absolute top-6 sm:top-10 right-6 sm:right-10 z-50 text-blue-400/40 hover:text-blue-400/80 text-[10px] sm:text-xs tracking-widest uppercase transition-all"
-                >
-                    Logout
-                </button>
-            )}
+            {/* Logout button & Registration Message */}
+            <div className="absolute top-6 sm:top-10 right-6 sm:right-10 z-50 flex flex-col items-end gap-4">
+                {registrationMessage && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="bg-blue-500/10 backdrop-blur-md border border-blue-500/20 rounded-2xl px-6 py-3 text-blue-100/80 text-xs sm:text-sm font-light shadow-xl max-w-xs text-right relative group"
+                    >
+                        {registrationMessage}
+                        <button
+                            onClick={() => setRegistrationMessage(null)}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-blue-900/50 rounded-full flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            ✕
+                        </button>
+                    </motion.div>
+                )}
+                {userId && (
+                    <button
+                        onClick={handleLogout}
+                        className="text-blue-400/40 hover:text-blue-400/80 text-[10px] sm:text-xs tracking-widest uppercase transition-all"
+                    >
+                        Logout
+                    </button>
+                )}
+            </div>
 
             {/* Footer */}
             <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 sm:gap-2 pointer-events-none">
@@ -622,14 +642,20 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (email: string, password: 
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
+    const [successMsg, setSuccessMsg] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email.trim() || !password.trim()) return;
         setLoading(true);
         setErrorMsg("");
+        setSuccessMsg("");
         const result = await onAuth(email.trim(), password, isSignUp);
-        if (!result.success && result.error) {
+        if (result.success) {
+            if (isSignUp) {
+                setSuccessMsg("가입이 완료되었습니다! 이메일 인증을 완료해 주세요.");
+            }
+        } else if (result.error) {
             // Translate common Supabase Auth errors to Korean for better UX
             let translatedError = result.error;
             if (result.error.includes("rate limit")) translatedError = "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
@@ -692,6 +718,20 @@ const AuthOverlay = React.memo(({ onAuth }: { onAuth: (email: string, password: 
                                 required
                             />
                         </div>
+
+                        {/* Success Message Display */}
+                        <AnimatePresence>
+                            {successMsg && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="text-emerald-400 text-xs sm:text-sm font-light mt-2 bg-emerald-500/10 py-3 px-4 rounded-xl border border-emerald-500/20"
+                                >
+                                    {successMsg}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Error Message Display */}
                         <AnimatePresence>
