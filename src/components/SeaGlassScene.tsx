@@ -417,8 +417,8 @@ export default function SeaGlassScene() {
 
         // 2. Physical push to nearby shards
         const allBodies = Matter.Composite.allBodies(engineRef.current.world);
-        const pushRadius = 250;
-        const pushStrength = 0.12; // Slightly stronger for better feel
+        const pushRadius = 200; // Slightly reduced radius
+        const pushStrength = 0.05; // Reduced for a weaker, gentler feel
 
         allBodies.forEach(body => {
             if (body.isStatic) return;
@@ -599,11 +599,11 @@ export default function SeaGlassScene() {
                     {ripples.map(ripple => (
                         <motion.div
                             key={ripple.id}
-                            initial={{ scale: 0, opacity: 0.6 }}
-                            animate={{ scale: 4, opacity: 0 }}
+                            initial={{ scale: 0, opacity: 0.3 }}
+                            animate={{ scale: 3, opacity: 0 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 1, ease: "easeOut" }}
-                            className="absolute rounded-full border border-white/30 bg-white/5 pointer-events-none"
+                            className="absolute rounded-full border border-white/20 bg-white/5 pointer-events-none"
                             style={{
                                 left: ripple.x,
                                 top: ripple.y,
