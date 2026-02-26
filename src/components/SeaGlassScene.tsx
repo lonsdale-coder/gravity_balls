@@ -277,7 +277,9 @@ export default function SeaGlassScene() {
 
         const x = Math.random() * (window.innerWidth * 0.6) + (window.innerWidth * 0.2);
         const y = Math.random() * (window.innerHeight * 0.5) + (window.innerHeight * 0.25);
-        const radius = 35 + Math.random() * 20;
+
+        const isMobile = window.innerWidth < 640;
+        const radius = (isMobile ? 22 : 35) + Math.random() * 15;
 
         const body = Matter.Bodies.circle(x, y, radius, {
             restitution: 0.8,
@@ -538,7 +540,9 @@ export default function SeaGlassScene() {
                     loadedShards.forEach(s => {
                         const x = Math.random() * (window.innerWidth * 0.6) + (window.innerWidth * 0.2);
                         const y = Math.random() * (window.innerHeight * 0.5) + (window.innerHeight * 0.25);
-                        const radius = 35 + Math.random() * 20;
+
+                        const isMobile = window.innerWidth < 640;
+                        const radius = (isMobile ? 22 : 35) + Math.random() * 15;
 
                         const body = Matter.Bodies.circle(x, y, radius, {
                             restitution: 0.8,
@@ -884,8 +888,8 @@ export default function SeaGlassScene() {
                         }
                     }}
                     className={`backdrop-blur-md border px-4 py-2 rounded-xl text-[10px] sm:text-xs tracking-[0.2em] font-medium uppercase transition-all shadow-lg flex items-center gap-2 ${isGyroEnabled
-                            ? "bg-blue-500/30 border-blue-400/50 text-blue-100"
-                            : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                        ? "bg-blue-500/30 border-blue-400/50 text-blue-100"
+                        : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
                         }`}
                 >
                     <span className={`w-1.5 h-1.5 rounded-full ${isGyroEnabled ? "bg-blue-400 animate-pulse" : "bg-white/20"}`} />
